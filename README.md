@@ -346,4 +346,4 @@ including in airplane mode.
 | Team member | Anant Singh |
 | Team member | Neeraj |
 | Institution | National Institute of Technology Uttarakhand (NIT Uttarakhand) |
-| Faculty mentor | Dr. Sneha Chauhan, Assistant Professor, NIT Uttarakhand |
+| Faculty mentor | Dr. Sneha Chauhan, Assistant Professor and Head of the Department of Computer Science and Engineering, NIT Uttarakhand |
