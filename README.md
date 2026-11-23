@@ -342,7 +342,7 @@ including in airplane mode.
 
 | Role | Name |
 |---|---|
-| Team member | Ajay Bahuguna | |Team Leader|
+| Team member | Ajay Bahuguna (Team Leader)|
 | Team member | Anant Singh |
 | Team member | Neeraj |
 | Institution | National Institute of Technology Uttarakhand (NIT Uttarakhand) |
