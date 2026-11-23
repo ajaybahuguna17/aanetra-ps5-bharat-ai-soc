@@ -78,8 +78,9 @@ both sides pin the values.
 
 - **Model:** Llama 3.2 1B Instruct.
 - **Runtime:** ExecuTorch 1.5.1 with the XNNPACK backend (CPU).
-- **Quantisation:** 8da4w (8-bit dynamic activations, 4-bit grouped weights).
-- **Export config:** `phase2-reasoning/export/llama_config.yaml`.
+- **Quantisation:** 8da4w (8-bit dynamic activations, 4-bit grouped weights), about 765 MiB.
+- **Export config:** `phase2-reasoning/export/llama_config.yaml`
+  (`python -m executorch.extension.llm.export.export_llm --config llama_config.yaml`).
 - **Role:** explains only. The prompt contains the vision result and the decision that was already
   made. Generation stops after the ACTION line to keep answers short, and answers are cached per
   result.
@@ -133,17 +134,18 @@ hot-rolled steel strip, 300 per class, with bounding boxes.
 - Split **70 / 15 / 15** (train / val / test), stratified per class, fixed seed 42
   (`phase1-vision/scripts/prepare_data.py`). The same split is used for the detector and the
   classifier (`build_cls_dataset.py` checks that the splits do not overlap).
-- Test set: 270 steel images.
+- Counts: 1,260 train / 270 validation / 270 test (210 / 45 / 45 per class).
 
 **not_steel**: 2,000 images that are not bare steel, used to train the 7th classifier class
-(`phase1-vision/scripts/build_not_steel.py`):
+(`phase1-vision/scripts/build_not_steel.py`), split 1,400 / 300 / 300:
 
 - **COCO** (everyday scenes and objects),
 - **DTD** (Describable Textures Dataset, non-steel textures),
 - **Places365** (fields, ground, roads, buildings).
 
-Images were downloaded from the official dataset URLs. The manifest with the chosen files is in
-`phase1-vision/results/phase1_2/not_steel_manifest.json`. Test set: 300 not_steel images.
+About half of these images are converted to grayscale and cropped to 200 x 200 so that the model
+cannot separate the classes by colour alone. Images were downloaded from the official dataset URLs.
+The manifest with the chosen files is in `phase1-vision/results/phase1_2/not_steel_manifest.json`.
 
 Datasets are not included in this repository (see [Licences and credits](#licences-and-credits)).
 
@@ -153,12 +155,17 @@ The test split was used once, after all thresholds were fixed on validation.
 
 | Metric | Result |
 |---|---|
-| Steel images classified correctly (7-class classifier) | **269 / 270** |
-| not_steel images rejected (RETAKE) | **298 / 300** |
-| Classifier overall | **567 / 570** (99.5 %) |
+| Steel images: correct defect class (fused result) | **269 / 270** (99.6 %) |
+| not_steel images rejected (RETAKE) | **298 / 300** (99.3 %) |
+| Steel images wrongly rejected | 1 / 270 (0.4 %) |
+| Classifier overall (7 classes) | **567 / 570** (99.5 %) |
 | Detector mAP50 | **0.741** |
 | Detector mAP50-95 | **0.413** |
 | Detector precision / recall | **0.67 / 0.74** |
+| TFLite FP32 vs original model | identical predictions on all test images |
+
+Detector mAP50 per class: scratches 0.93, patches 0.89, pitted_surface 0.86, inclusion 0.85,
+rolled-in_scale 0.56, crazing 0.36 (faint textures without clear edges are the hardest to box).
 
 Raw numbers, confusion matrices and curves are in `phase1-vision/results/`
 (`phase1_1/` for the detector and the 6-class classifier, `phase1_2/` for the 7-class classifier
@@ -169,12 +176,17 @@ and the not_steel threshold).
 Tested on:
 
 - **Samsung Galaxy A16 5G** (6 GB RAM)
-- **Samsung Galaxy A12**
+- **Samsung Galaxy A12** (SM-A127F, about 5.6 GiB visible RAM)
 
-| Stage | Time |
+| Stage | Result |
 |---|---|
 | Vision (image checks + detector + classifier + fusion) | ~0.2 – 0.5 s per image |
-| Llama 3.2 1B explanation | ~11 tokens/s |
+| Llama model load | ~0.5 s |
+| Llama prompt | ~200 tokens |
+| Llama generation speed | ~11 tokens/s (A16), ~8.6 tokens/s (A12) |
+| Time to first token | ~9.7 s (A12) |
+| Full explanation | ~20 – 24 s (A16), ~31 s (A12), measured before the stop-after-ACTION rule; cached results are instant |
+| Memory after loading Llama | ~990 MiB |
 
 The decision is shown as soon as vision finishes. The explanation streams in after it.
 `phase2-reasoning/android/benchmarks/benchmark_template.csv` is the sheet used to record runs.
@@ -188,9 +200,9 @@ The decision is shown as soon as vision finishes. The explanation streams in aft
 - **Explanation** from Llama on the phone, streamed, with a suggested action.
 - **Inspection history** with timestamps and thumbnails, and **CSV export**.
 - **Offline**: the vision models are inside the APK. Llama (`llama3_2.pte`, `tokenizer.model`) is
-  downloaded once on first use from
-  <https://github.com/ajaybahuguna17/aanetra-models/releases/tag/v1.0-llama>
-  and stored on the phone. After that no network is used.
+  downloaded once on first launch from
+  <https://github.com/ajaybahuguna17/aanetra-models/releases/tag/v1.0-llama>,
+  checked against its SHA-256 hash and stored on the phone. After that no network is used.
 
 ## Repository layout
 
@@ -275,22 +287,31 @@ gradlew.bat :core:testDebugUnitTest :vision:testDebugUnitTest :advisor:testDebug
 
 ## How to install
 
+**Easiest:** download `AANetra-v1.0.apk` from this repository's
+[Releases page](https://github.com/ajaybahuguna17/aanetra-ps5-bharat-ai-soc/releases),
+open it on the phone and allow installing from this source.
+
+**With adb:**
+
 1. Enable USB debugging on the phone and connect it.
 2. `adb install -r app\build\outputs\apk\debug\app-debug.apk`
-3. Open AANetra. On first use of the explanation, allow the one-time Llama download
-   (about 800 MB, Wi-Fi recommended). After that the app works offline.
+
+Then open AANetra. On first launch the app downloads the Llama model once (about 800 MB,
+Wi-Fi recommended; it asks before using mobile data). After that the app works fully offline,
+including in airplane mode.
 
 ## Limitations and future work
 
 - **NEU domain gap.** NEU-DET images are 200 x 200 grayscale crops taken under lab conditions.
-  Real phone photos on a line differ in lighting, scale, angle and texture. Severity cut-offs were
-  tuned on NEU crops and must be re-tuned on real images.
+  Real phone photos differ in lighting, scale, angle and texture, and the classifier currently
+  answers RETAKE for most of them. Severity cut-offs were tuned on NEU crops and must be re-tuned
+  on real images.
 - **No defect-free images.** NEU-DET has no "good" steel class, so PASS cannot be measured on real
   clean steel yet. The not_steel class covers wrong photos, not clean steel.
 - **Live camera mode.** Today the app works on single photos. Next step: continuous inspection on
   the camera stream.
-- **Real factory data.** Collect and label images from a real line, retrain, and validate the rules
-  with plant quality staff.
+- **Real factory data.** Collect and label images from a real line (good and defective parts),
+  retrain, add anomaly detection for unseen defects, and validate the rules with plant quality staff.
 
 ## Licences and credits
 
@@ -299,7 +320,8 @@ gradlew.bat :core:testDebugUnitTest :vision:testDebugUnitTest :advisor:testDebug
 - **Llama 3.2** is used under the
   [Llama 3.2 Community License](https://www.llama.com/llama3_2/license/).
   "Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright © Meta Platforms, Inc.
-  All Rights Reserved." The model files are not stored in this repository.
+  All Rights Reserved." The model files are not stored in this repository; the licence and notice
+  are included with the model release.
 - **NEU-DET.** Please cite:
   - K. Song and Y. Yan, "A noise robust method based on completed local binary patterns for
     hot-rolled steel strip surface defects," *Applied Surface Science*, vol. 285, pp. 858–864, 2013.
@@ -320,8 +342,8 @@ gradlew.bat :core:testDebugUnitTest :vision:testDebugUnitTest :advisor:testDebug
 
 | Role | Name |
 |---|---|
-| Team member | [Student 1] |
-| Team member | [Student 2] |
-| Team member | [Student 3] |
-| Institution | [College] |
-| Faculty mentor | [Faculty mentor] |
+| Team member | Ajay Bahuguna | |Team Leader|
+| Team member | Anant Singh |
+| Team member | Neeraj |
+| Institution | National Institute of Technology Uttarakhand (NIT Uttarakhand) |
+| Faculty mentor | Dr. Sneha Chauhan, Assistant Professor, NIT Uttarakhand |
