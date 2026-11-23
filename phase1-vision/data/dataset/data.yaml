@@ -1,0 +1,19 @@
+# Ultralytics YOLO Industrial Defect Detection Dataset
+# Standard Benchmark: NEU Surface Defect Database (NEU-DET)
+# Written automatically by prepare_data.py
+# No `path:` key on purpose -> dataset root = the folder containing this file.
+train: images/train
+val: images/val
+test: images/test
+
+# Defect class count
+nc: 6
+
+# Defect class mapping
+names:
+  0: crazing
+  1: inclusion
+  2: patches
+  3: pitted_surface
+  4: rolled-in_scale
+  5: scratches

@@ -1,0 +1,80 @@
+package com.team.defectqc.core
+
+/**
+ * One bounding-box detection returned by the vision pipeline.
+ * Coordinates are in the original image's pixel dimensions.
+ */
+data class DefectBox(
+    val className: String,
+    val confidence: Float,
+    val bboxXYXY: List<Float>
+)
+
+/**
+ * Kotlin representation of Person A's DemoResult.
+ *
+ * These fields describe the deterministic vision pipeline output.
+ * Llama must never modify the class, alert status, or severity.
+ */
+data class DetectionEvent(
+    val id: String,
+    val timestampEpochMs: Long,
+
+    val imageName: String,
+    val detector: String,
+
+    val alert: Boolean,
+    val finalClass: String,
+    val decidedBy: String,
+
+    val classifierClass: String?,
+    val classifierConfidence: Float?,
+
+    val numBoxes: Int,
+    val numFinalBoxes: Int,
+    val largestAreaPct: Float?,
+
+    val severityLevel: String?,
+    val reason: String,
+
+    // All kept detections, including detections of other classes.
+    val boxes: List<DefectBox>,
+
+    val detectorMs: Long = 0L,
+    val classifierMs: Long = 0L,
+    val lineId: String? = null,
+
+    // Gate decision from the vision pipeline: "RETAKE" (not steel / failed image check),
+    // "HOLD" (unsure), or null (decision follows from alert + severity). See QualityDecision.
+    val decision: String? = null
+)
+
+/**
+ * Explanation produced by Llama.
+ * It does not make an ACCEPT / REWORK / REJECT decision.
+ */
+data class Advisory(
+    val eventId: String,
+    val finalClass: String,
+    val severityLevel: String?,
+    val summary: String,
+    val likelyCause: String,
+    val recommendedAction: String,
+    val llmMs: Long,
+    val tokensPerSecond: Float,
+    val cached: Boolean,
+    val rawResponse: String = "",
+    // Generation metrics (null when unknown, e.g. a cached or fake advisory).
+    val promptTokens: Int? = null,
+    val generatedTokens: Int? = null,
+    val ttftMs: Long? = null,
+    /** True when generation was stopped right after the ACTION line. */
+    val stoppedEarly: Boolean = false
+)
+
+interface Advisor {
+    suspend fun load(): Boolean
+    suspend fun advise(event: DetectionEvent): Advisory
+    suspend fun ask(question: String, logSummary: String): String
+    suspend fun close()
+}
